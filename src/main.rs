@@ -198,6 +198,7 @@ fn start_server(folder: &str) -> Result<(), Box<dyn Error>> {
         .arg("-dmS")
         .arg(server_path.file_name().unwrap())
         .arg(server_path.join("run.sh").to_str().unwrap())
+        .current_dir(server_path)
         .spawn() {
         Ok(spawn_info) => println!("{} {}",
                                    "[Y] Started server on "
@@ -231,6 +232,7 @@ fn stop_server(folder: &str) -> Result<(), Box<dyn Error>> {
         .arg(data.pid.to_string())
         .arg("-X")
         .arg("\nstop")
+        .current_dir(server_path)
         .spawn() {
         Err(e) => println!("{} {}",
                            "[X] Server could not be started. Reason: "
