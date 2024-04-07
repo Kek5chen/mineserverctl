@@ -200,11 +200,14 @@ fn start_server(folder: &str) -> Result<(), Box<dyn Error>> {
         .arg(server_path.join("run.sh").to_str().unwrap())
         .current_dir(server_path)
         .spawn() {
-        Ok(spawn_info) => println!("{} {}",
-                                   "[Y] Started server on "
-                                       .bold()
-                                       .color(Color::BrightGreen),
-                                   spawn_info.id()),
+        Ok(mut spawn_info) => {
+            spawn_info.wait()?;
+            println!("{} {}",
+                     "[Y] Started server on "
+                         .bold()
+                         .color(Color::BrightGreen),
+                     spawn_info.id());
+        }
         Err(e) => println!("{} {}",
                            "[X] Server could not be started. Reason: "
                                .bold()
