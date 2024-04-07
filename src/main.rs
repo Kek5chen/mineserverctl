@@ -9,7 +9,7 @@ use chrono::{DateTime, FixedOffset};
 use colored::{Color, Colorize};
 use indicatif::{ProgressBar, ProgressStyle};
 use regex::Regex;
-use sysinfo::{Pid, ProcessStatus, System};
+use sysinfo::{Pid, System};
 
 #[derive(Debug)]
 struct ServerData {
