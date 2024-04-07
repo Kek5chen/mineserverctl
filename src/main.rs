@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::io;
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::raw::pid_t;
 use std::path::{Path, PathBuf};
@@ -279,7 +279,36 @@ fn show_console(folder: &str) -> Result<(), Box<dyn Error>> {
     let data = get_server_data(folder)?;
     if !check_server(&data, false, true) { return Ok(()); }
 
-    println!("{:?}", data);
+    print!("{}", "[!] You will be able to exit the console using Ctrl+A + Ctrl+D. Ready? [y/n] "
+        .bold()
+        .color(Color::BrightYellow));
+    io::stdout().flush()?;
+    let mut char: [u8; 1] = [0];
+    if io::stdin().read_exact(&mut char).is_ok() && char[0].to_ascii_lowercase() as char != 'y' {
+        println!("{}", "[Y] Exiting..."
+            .bold()
+            .color(Color::BrightGreen));
+        return Ok(());
+    }
+    let server_path = Path::new(folder).canonicalize().unwrap();
+    match Command::new("screen")
+        .arg("-xr")
+        .arg(data.pid.to_string())
+        .current_dir(server_path)
+        .spawn() {
+        Err(e) => println!("{} {}",
+                           "[X] Could not join server console. Reason: "
+                               .bold()
+                               .color(Color::BrightRed),
+                           e),
+        Ok(mut spawn_info) => {
+            spawn_info.wait()?;
+            println!("{}",
+                     "[Y] Left server console. Welcome Back!"
+                         .bold()
+                         .color(Color::BrightGreen));
+        }
+    }
     Ok(())
 }
 
