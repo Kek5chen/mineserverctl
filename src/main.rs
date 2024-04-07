@@ -244,39 +244,35 @@ fn stop_server(folder: &str) -> Result<(), Box<dyn Error>> {
                            e),
         _ => {}
     }
-
+    let proc_pid = Pid::from_u32(data.pid as u32);
     let mut system = System::new_all();
-    system.refresh_processes();
 
-    if let Some(proc) = system.process(Pid::from_u32(data.pid as u32)) {
-        let spinner = ProgressBar::new_spinner();
-        spinner.set_style(ProgressStyle::default_spinner()
-            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
-            .template("{spinner:.blue} {msg}")?);
+    let spinner = ProgressBar::new_spinner();
+    spinner.set_style(ProgressStyle::default_spinner()
+        .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+        .template("{spinner:.blue} {msg}")?);
 
-        spinner.set_message(format!("{} {}",
-                                    "[O] Stopping server on "
-                                        .bold()
-                                        .color(Color::BrightYellow),
-                                    data.pid));
+    spinner.set_message(format!("{} {}",
+                                "[O] Stopping server on"
+                                    .bold()
+                                    .color(Color::BrightYellow),
+                                data.pid));
 
-        loop {
-            if proc.status() != ProcessStatus::Run {
-                break;
-            }
-            spinner.inc(1);
-            std::thread::sleep(std::time::Duration::from_millis(50));
+    loop {
+        system.refresh_process(proc_pid);
+        if let None = system.process(proc_pid) {
+            break;
         }
-
-        spinner.finish_with_message(format!("{} {}",
-                                            "[Y] Stopped server on "
-                                                .bold()
-                                                .color(Color::BrightGreen),
-                                            data.pid));
-        Ok(())
-    } else {
-        Err(Box::new(io::Error::new(ErrorKind::NotFound, "The server process was not found anymore")))
+        spinner.inc(1);
+        std::thread::sleep(std::time::Duration::from_millis(50));
     }
+
+    spinner.finish_with_message(format!("{} {}",
+                                        "[Y] Stopped server on "
+                                            .bold()
+                                            .color(Color::BrightGreen),
+                                        data.pid));
+    Ok(())
 }
 
 fn show_console(folder: &str) -> Result<(), Box<dyn Error>> {
