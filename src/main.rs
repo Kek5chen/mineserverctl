@@ -2,7 +2,6 @@ use std::error::Error;
 use std::io;
 use std::io::{ErrorKind, Read, Write};
 use std::os::unix::fs::PermissionsExt;
-use std::os::unix::raw::pid_t;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use chrono::{DateTime, FixedOffset};
@@ -15,13 +14,13 @@ use sysinfo::{Pid, System};
 struct ServerData {
     exists: bool,
     is_running: bool,
-    pid: pid_t,
+    pid: u32,
     is_ready: bool,
 }
 
 #[derive(Debug)]
 struct ScreenSession {
-    pid: pid_t,
+    pid: u32,
     name: String,
     started_at: Option<DateTime<FixedOffset>>,
     attached: bool,
@@ -76,7 +75,7 @@ fn get_active_screens() -> io::Result<Vec<ScreenSession>> {
             return None;
         }
 
-        let pid: pid_t = match pid.unwrap().as_str().parse() {
+        let pid: u32 = match pid.unwrap().as_str().parse() {
             Ok(pid) => pid,
             Err(_) => return None
         };
@@ -102,7 +101,7 @@ fn get_active_screens() -> io::Result<Vec<ScreenSession>> {
     Ok(screens)
 }
 
-fn get_proc_cwd(pid: pid_t) -> Option<PathBuf> {
+fn get_proc_cwd(pid: u32) -> Option<PathBuf> {
     let proc_path = Path::new("/proc").join(pid.to_string()).join("cwd");
     if !proc_path.exists() || proc_path.is_file() || !proc_path.is_symlink() {
         return None;
@@ -244,7 +243,7 @@ fn stop_server(folder: &str) -> Result<(), Box<dyn Error>> {
                            e),
         _ => {}
     }
-    let proc_pid = Pid::from_u32(data.pid as u32);
+    let proc_pid = Pid::from_u32(data.pid);
     let mut system = System::new_all();
 
     let spinner = ProgressBar::new_spinner();
