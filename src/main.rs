@@ -31,7 +31,7 @@ fn check_syntax() -> Result<(String, String), Box<dyn Error>> {
     let args: Vec<String> = std::env::args().collect();
     match args.len() {
         3 => Ok((args[1].clone(), args[2].clone())),
-        _ => Err(format!("{} <start/stop/console> <server_folder>", args[0]).into()),
+        _ => Err(format!("{} <status/start/stop/console> <server_folder>", args[0]).into()),
     }
 }
 
@@ -312,6 +312,46 @@ fn show_console(folder: &str) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+fn show_all_status() -> Result<(), Box<dyn Error>> {
+    let screens = get_active_screens()?;
+
+    let mut first_server = true;
+    for screen in screens {
+        let server_path = get_proc_cwd(screen.pid);
+        if server_path.is_none() { continue; }
+        let server_path = server_path.unwrap();
+
+        if !server_path.join("run.sh").exists() {
+            continue;
+        } else if first_server {
+            first_server = false;
+            println!("{}", "[Y] Servers currently running:"
+                .bold()
+                .color(Color::BrightGreen));
+        }
+
+        let server_path = server_path.to_str().unwrap();
+        let server_path = server_path.split('/').last().unwrap();
+
+        let status = match screen.attached {
+            true => "Attached".to_string(),
+            false => "Detached".to_string()
+        };
+
+        println!("{} {} {} <{}>",
+                 server_path.bold(),
+                 "is running on".bold(),
+                 screen.pid,
+                 status.color(Color::BrightYellow));
+    }
+    if first_server {
+        println!("{}", "[O] No servers are currently running."
+            .bold()
+            .color(Color::BrightYellow));
+    }
+    Ok(())
+}
+
 fn real_main() -> Result<(), Box<dyn Error>> {
     let (action, folder) = check_syntax()?;
 
@@ -319,6 +359,7 @@ fn real_main() -> Result<(), Box<dyn Error>> {
         "start" => start_server(&folder),
         "stop" => stop_server(&folder),
         "console" => show_console(&folder),
+        "status" => show_all_status(),
         _ => Err(String::new().into())
     }
 }
