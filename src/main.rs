@@ -30,6 +30,7 @@ fn check_syntax() -> Result<(String, String), Box<dyn Error>> {
     let args: Vec<String> = std::env::args().collect();
     match args.len() {
         3 => Ok((args[1].clone(), args[2].clone())),
+        2 => Ok((args[1].clone(), ".".to_string())),
         _ => Err(format!("{} <status/start/stop/console> <server_folder>", args[0]).into()),
     }
 }
