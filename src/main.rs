@@ -109,7 +109,7 @@ fn get_proc_cwd(pid: pid_t) -> Option<PathBuf> {
     }
 
     let link_path = match proc_path.read_link() {
-        Ok(link_path) => link_path,
+        Ok(link_path) => link_path.canonicalize().unwrap(),
         Err(_) => return None,
     };
     if !link_path.exists() {
@@ -142,7 +142,7 @@ fn get_server_data(folder: &str) -> io::Result<ServerData> {
         let cwd = get_proc_cwd(screen.pid);
         if cwd.is_none() { continue; }
 
-        if Path::new(folder) == cwd.unwrap() {
+        if Path::new(folder).canonicalize()? == cwd.unwrap().canonicalize()? {
             return Ok(ServerData {
                 exists: true,
                 is_running: true,
@@ -193,7 +193,7 @@ fn start_server(folder: &str) -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    let server_path = Path::new(folder);
+    let server_path = Path::new(folder).canonicalize().unwrap();
     match Command::new("screen")
         .arg("-dmS")
         .arg(server_path.file_name().unwrap())
@@ -225,6 +225,7 @@ fn stop_server(folder: &str) -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
+    let server_path = Path::new(folder).canonicalize().unwrap();
     match Command::new("screen")
         .arg("-S")
         .arg(data.pid.to_string())
