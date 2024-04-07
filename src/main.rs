@@ -231,7 +231,7 @@ fn stop_server(folder: &str) -> Result<(), Box<dyn Error>> {
         .arg("-S")
         .arg(data.pid.to_string())
         .arg("-X")
-        .arg("\nstop")
+        .arg("quit")
         .current_dir(server_path)
         .spawn() {
         Err(e) => println!("{} {}",
