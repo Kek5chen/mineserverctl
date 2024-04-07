@@ -360,14 +360,16 @@ fn real_main() -> Result<(), Box<dyn Error>> {
         "stop" => stop_server(&folder),
         "console" => show_console(&folder),
         "status" => show_all_status(),
-        _ => Err(String::new().into())
+        s => Err(format!("`{}` {}", s, "not found as a valid action"
+            .bold()
+            .color(Color::BrightRed)).into())
     }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     match real_main() {
         Err(e) => {
-            eprintln!("Error: {}", e);
+            eprintln!("{} {}", "Error:".bold().color(Color::BrightRed), e);
             Ok(())
         }
         Ok(()) => Ok(())
