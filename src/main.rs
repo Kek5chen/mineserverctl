@@ -2,20 +2,26 @@ use std::error::Error;
 use std::io;
 use std::io::ErrorKind;
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
+use std::os::unix::raw::pid_t;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use chrono::{DateTime, FixedOffset};
+use colored::{Color, Colorize};
+use indicatif::{ProgressBar, ProgressStyle};
 use regex::Regex;
+use sysinfo::{Pid, ProcessStatus, System};
 
+#[derive(Debug)]
 struct ServerData {
+    exists: bool,
     is_running: bool,
-    pid: u32,
+    pid: pid_t,
     is_ready: bool,
 }
 
 #[derive(Debug)]
 struct ScreenSession {
-    pid: u32,
+    pid: pid_t,
     name: String,
     started_at: Option<DateTime<FixedOffset>>,
     attached: bool,
@@ -70,7 +76,7 @@ fn get_active_screens() -> io::Result<Vec<ScreenSession>> {
             return None;
         }
 
-        let pid: u32 = match pid.unwrap().as_str().parse() {
+        let pid: pid_t = match pid.unwrap().as_str().parse() {
             Ok(pid) => pid,
             Err(_) => return None
         };
@@ -96,31 +102,182 @@ fn get_active_screens() -> io::Result<Vec<ScreenSession>> {
     Ok(screens)
 }
 
+fn get_proc_cwd(pid: pid_t) -> Option<PathBuf> {
+    let proc_path = Path::new("/proc").join(pid.to_string()).join("cwd");
+    if !proc_path.exists() || proc_path.is_file() || !proc_path.is_symlink() {
+        return None;
+    }
+
+    let link_path = match proc_path.read_link() {
+        Ok(link_path) => link_path,
+        Err(_) => return None,
+    };
+    if !link_path.exists() {
+        return None;
+    }
+
+    Some(link_path)
+}
+
 fn get_server_data(folder: &str) -> io::Result<ServerData> {
-    let run_sh = Path::new(folder).join("run.sh");
+    let folder_path = Path::new(folder);
+    if !folder_path.exists() {
+        return Ok(ServerData {
+            exists: false,
+            is_running: false,
+            pid: 0,
+            is_ready: false,
+        });
+    }
+
+    let run_sh = folder_path.join("run.sh");
     let mut is_ready = run_sh.exists() && run_sh.is_file();
     is_ready = is_ready && match run_sh.metadata() {
         Ok(metadata) => metadata.permissions().mode() & 0o100 != 0,
         Err(_) => false
     };
 
-    let screens = get_active_screens();
-    println!("{:?}", screens);
-    Err(io::Error::new(ErrorKind::Other, "Nothing much else for now"))
+    let screens = get_active_screens()?;
+    for screen in screens {
+        let cwd = get_proc_cwd(screen.pid);
+        if cwd.is_none() { continue; }
+
+        if Path::new(folder) == cwd.unwrap() {
+            return Ok(ServerData {
+                exists: true,
+                is_running: true,
+                pid: screen.pid,
+                is_ready,
+            });
+        }
+    }
+    return Ok(ServerData {
+        exists: true,
+        is_running: false,
+        pid: 0,
+        is_ready,
+    });
+}
+
+fn check_server(server_data: &ServerData, needs_ready: bool, needs_running: bool) -> bool {
+    if !server_data.exists {
+        eprintln!("{}",
+                  "[X] The specified server does not exist."
+                      .bold()
+                      .color(Color::BrightRed));
+    } else if needs_ready && !server_data.is_ready {
+        eprintln!("{}",
+                  "[X] The specified server is not ready yet. Please add a run.sh file which will start the server."
+                      .bold()
+                      .color(Color::BrightRed))
+    } else if needs_running && !server_data.is_running {
+        eprintln!("{}",
+                  "[X] The specified server is not running. Please start it first."
+                      .bold()
+                      .color(Color::BrightRed))
+    } else {
+        return true;
+    }
+    return false;
 }
 
 fn start_server(folder: &str) -> Result<(), Box<dyn Error>> {
-    let data = get_server_data(folder);
+    let data = get_server_data(folder)?;
+    if !check_server(&data, true, false) { return Ok(()); }
+
+    if data.is_running {
+        println!("{}",
+                 "[O] The specified server is already running."
+                     .bold()
+                     .color(Color::BrightYellow));
+        return Ok(());
+    }
+
+    let server_path = Path::new(folder);
+    match Command::new("screen")
+        .arg("-dmS")
+        .arg(server_path.file_name().unwrap())
+        .arg(server_path.join("run.sh").to_str().unwrap())
+        .spawn() {
+        Ok(spawn_info) => println!("{} {}",
+                                   "[Y] Started server on "
+                                       .bold()
+                                       .color(Color::BrightGreen),
+                                   spawn_info.id()),
+        Err(e) => println!("{} {}",
+                           "[X] Server could not be started. Reason: "
+                               .bold()
+                               .color(Color::BrightRed),
+                           e)
+    }
     Ok(())
 }
 
 fn stop_server(folder: &str) -> Result<(), Box<dyn Error>> {
-    let data = get_server_data(folder);
-    Ok(())
+    let data = get_server_data(folder)?;
+    if !check_server(&data, false, true) { return Ok(()); }
+
+    if !data.is_running {
+        println!("{}",
+                 "[O] The specified server is already stopped."
+                     .bold()
+                     .color(Color::BrightYellow));
+        return Ok(());
+    }
+
+    match Command::new("screen")
+        .arg("-S")
+        .arg(data.pid.to_string())
+        .arg("-X")
+        .arg("\nstop")
+        .spawn() {
+        Err(e) => println!("{} {}",
+                           "[X] Server could not be started. Reason: "
+                               .bold()
+                               .color(Color::BrightRed),
+                           e),
+        _ => {}
+    }
+
+    let mut system = System::new_all();
+    system.refresh_processes();
+
+    if let Some(proc) = system.process(Pid::from_u32(data.pid as u32)) {
+        let spinner = ProgressBar::new_spinner();
+        spinner.set_style(ProgressStyle::default_spinner()
+            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+            .template("{spinner:.blue} {msg}")?);
+
+        spinner.set_message(format!("{} {}",
+                                    "[O] Stopping server on "
+                                        .bold()
+                                        .color(Color::BrightYellow),
+                                    data.pid));
+
+        loop {
+            if proc.status() != ProcessStatus::Run {
+                break;
+            }
+            spinner.inc(1);
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+
+        spinner.finish_with_message(format!("{} {}",
+                                            "[Y] Stopped server on "
+                                                .bold()
+                                                .color(Color::BrightGreen),
+                                            data.pid));
+        Ok(())
+    } else {
+        Err(Box::new(io::Error::new(ErrorKind::NotFound, "The server process was not found anymore")))
+    }
 }
 
 fn show_console(folder: &str) -> Result<(), Box<dyn Error>> {
-    let data = get_server_data(folder);
+    let data = get_server_data(folder)?;
+    if !check_server(&data, false, true) { return Ok(()); }
+
+    println!("{:?}", data);
     Ok(())
 }
 
