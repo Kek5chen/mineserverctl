@@ -7,6 +7,6 @@ This CLI is made for people that want to access consoles or manage minecraft ser
 ## Features
 
 - **Server Management**: Effortlessly start and stop Minecraft server instances using the intuitive command-line interface.
-- **Server Status Checks**: Quickly ascertain the running status of any server instance, including process ID (PID) and readiness state.
+- **Server Status Checks**: Quickly ascertain the running status of any server instance, including process ID and readiness state.
 - **Session Management**: Seamlessly manage screen sessions associated with Minecraft servers, allowing for detailed oversight of server activity.
 - **Console Access**: Gain direct access to the Minecraft server console for real-time interaction and management.
